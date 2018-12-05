@@ -1,0 +1,4 @@
+{
+    "port": "COM5",
+    "board": "Intel:arc32:arduino_101"
+}
