@@ -4,8 +4,9 @@
 #include <SD.h>
 
 // BLE LED Switch Characteristic - custom 128-bit UUID, read and writable by central
-BLEUnsignedIntCharacteristic SensorStatus1("19B10011-E8F2-537E-4F6C-D104768A1214", BLERead | BLEWrite  );
-BLEPeripheral blePeripheral;  // BLE Peripheral Device (the board you're programming)
+// BLEUnsignedIntCharacteristic SensorStatus1("19B10011-E8F2-537E-4F6C-D104768A1214", BLERead | BLEWrite  );
+BLEPeripheral blePeripheral = BLEPeripheral();
+BLEIntCharacteristic SensorStatus1("19B10011-E8F2-537E-4F6C-D104768A1214", BLERead | BLEWrite  );
 BLEService GaitSensor1("19B10010-E8F2-537E-4F6C-D104768A1214"); // BLE AnalogRead Service
 
 const int SD_CARD_PIN = 4; //pin connected to chip select line of SD card
@@ -22,7 +23,8 @@ const uint8_t BASE_NAME_SIZE = sizeof("log") - 1;
 char fileName[] = "log00.csv";
 
 Madgwick filter;
-unsigned long microsPerReading, microsPrevious;
+unsigned long microsPerReading = 1000000 / 25; //micro seconds needed per reading (period)
+unsigned long microsPrevious;
 
 /*
   Converts raw acceleration values into m/s2, for range of 2G
@@ -39,44 +41,8 @@ float convertRawGyro(int gRaw) {
   return (gRaw * GYR_RANGE) / 32768.0;
 }
 
-void setup() {
-  CurieIMU.begin();   // start the IMU and filter
-  CurieIMU.setGyroRate(ACC_SAMPLING_RATE); //set sampling rate 25Hz
-  CurieIMU.setAccelerometerRate(GYR_SAMPLING_RATE); //set sampling rate 25Hz
-  filter.begin(25); //converts raw data into 4-dimensional numbers
-  CurieIMU.setAccelerometerRange(ACC_RANGE); 
-  CurieIMU.setGyroRange(GYR_RANGE); 
-
-  // initialize variables to pace updates to correct rate
-  microsPerReading = 1000000 / 25; //micro seconds needed per reading (period)
-  microsPrevious = micros(); //micros() returns number of microseconds since Arduino start running current program. goes back to 0 (overflow) in arond 70 mins
-  
-  // wait for SD card to be detected in slot
-  while (!SD.begin(SD_CARD_PIN)) {}
-  filecontrol = 1;
-
-  // set advertised local name and service UUID:
-  blePeripheral.setLocalName("GaitSensor1");
-  blePeripheral.setAdvertisedServiceUuid(GaitSensor1.uuid());
-
-  // add service and characteristic:
-  blePeripheral.addAttribute(GaitSensor1);
-  blePeripheral.addAttribute(SensorStatus1);
-
-  // begin advertising BLE Light service:
-  blePeripheral.begin();
-}
-
-void loop() {
-  int aix, aiy, aiz, gix, giy, giz;
-  float ax, ay, az, gx, gy, gz;
-  unsigned long microsNow, seconds;
-  String dataString = ""; //TODO: convert to buffer
-
-  microsNow = micros();
-  BLECentral central = blePeripheral.central();
-  if(central) { // if a central is connected to peripheral:
-    if(filecontrol == 1) {
+void initSDCardFile() {
+  if(filecontrol == 1) {
       while (SD.exists(fileName)) {
         if (fileName[BASE_NAME_SIZE + 1] != '9') {
           fileName[BASE_NAME_SIZE + 1]++;
@@ -92,45 +58,133 @@ void loop() {
       if (!datafile) {return;}
       datafile.close(); //close file
       filecontrol = 0;
-  }
-     
-  if(microsNow - microsPrevious >= microsPerReading) {        
-    if(SensorStatus1.written()) {
-      switchcontrol = SensorStatus1.value();
     }
+}
 
-    if(switchcontrol == 1) {
-      microsPrevious = microsNow;
-      CurieIMU.readMotionSensor(aix, aiy, aiz, gix, giy, giz);
-      ax = convertRawAcceleration(aix); 
-      ay = convertRawAcceleration(aiy); 
-      az = convertRawAcceleration(aiz); 
-      gx = convertRawGyro(gix); 
-      gy = convertRawGyro(giy); 
-      gz = convertRawGyro(giz); 
-      seconds = micros();
-      dataString += String(ax); dataString += ",";
-      dataString += String(ay); dataString += ",";
-      dataString += String(az); dataString += ",";
-      dataString += String(gx); dataString += ",";
-      dataString += String(gy); dataString += ",";
-      dataString += String(gz); dataString += ",";
-      dataString += String(seconds); 
-      // dataString += String(headingDegrees);
-      datafile = SD.open(fileName, FILE_WRITE);
-      datafile.println(dataString);
-      datafile.flush();
-      datafile.close();
-        // These statements are for debugging puposes only and can be commented out to increase the efficiency of the sketch.
-      /*   Serial.print("ax="); Serial.print(ax); Serial.print(" "); 
-         Serial.print("ay="); Serial.print(ay); Serial.print(" "); 
-         Serial.print("az="); Serial.print(az); Serial.print("\n"); 
-         Serial.print("gx="); Serial.print(gx); Serial.print(" "); 
-         Serial.print("gy="); Serial.print(gy); Serial.print(" "); 
-         Serial.print("gz="); Serial.print(gz); Serial.print("\n"); 
-         Serial.print(" Degress = "); Serial.print(headingDegrees); Serial.print("\n"); */
-    }
-  } else {//if central not connected
+void SDCardFileWrite(float dataBuffer) {
+  datafile = SD.open(fileName, FILE_WRITE);
+  datafile.println(dataBuffer);
+  datafile.flush();
+  datafile.close();
+}
+
+
+/*
+ Event handlers for BLE
+*/
+void BLESensorWrittenHandler(BLECentral &central, BLECharacteristic &characteristic) {
+  Serial.print(F('Data received from central'));
+  switchcontrol = 1;
+}
+
+void BLEServiceConnectHandler(BLECentral& central) {
+  // central connected event handler
+  Serial.print(F("Connected event, central: "));
+  Serial.println(central.address());
+}
+
+void BLEServiceDisconnectHandler(BLECentral& central) {
+  // central disconnected event handler
+  Serial.print(F("Disconnected event, central: "));
+  Serial.println(central.address());
+  switchcontrol = 0;
+}
+
+void configureSDReader() {
+  // wait for SD card to be detected in slot
+  while (!SD.begin(SD_CARD_PIN)) {}
+  filecontrol = 1; //this stupid flag just signals when to restart writing to a new file, if SET means need to write new file
+}
+
+void configureCurie() {
+  CurieIMU.begin();   // start the IMU and filter
+  CurieIMU.setGyroRate(ACC_SAMPLING_RATE); //set sampling rate 25Hz
+  CurieIMU.setAccelerometerRate(GYR_SAMPLING_RATE); //set sampling rate 25Hz
+  filter.begin(25); //converts raw data into 4-dimensional numbers
+  CurieIMU.setAccelerometerRange(ACC_RANGE); 
+  CurieIMU.setGyroRange(GYR_RANGE); 
+}
+
+
+void configureBLE() {
+  blePeripheral.setDeviceName("P21"); //works?
+  // set advertised local name and service UUID:
+  blePeripheral.setLocalName("GaitSensor1");
+  blePeripheral.setAdvertisedServiceUuid(GaitSensor1.uuid());
+  // add service and characteristic:
+  blePeripheral.addAttribute(GaitSensor1);
+  blePeripheral.addAttribute(SensorStatus1);
+  blePeripheral.begin();
+
+  //register BLE event handler 
+  SensorStatus1.setEventHandler(BLEWritten, BLESensorWrittenHandler);
+  blePeripheral.setEventHandler(BLEConnected, BLEServiceConnectHandler);
+  blePeripheral.setEventHandler(BLEDisconnected, BLEServiceDisconnectHandler);
+}
+
+void setup() {
+  Serial.begin(9600);
+
+  configureCurie();
+  //configureSDReader();
+  configureBLE();
+
+  microsPrevious = micros(); //micros() returns number of microseconds since Arduino start running current program. goes back to 0 (overflow) in arond 70 mins
+}
+
+void populateBuffer(float buffer[], float values[]) {
+  int j = 0;
+  for(unsigned int i = 0; i<= 6; i++) {
+    buffer[i] = values[j++];
+  }
+}
+
+void loop() {
+  int aix, aiy, aiz, gix, giy, giz;
+  float ax, ay, az, gx, gy, gz;
+  unsigned long microsNow, seconds;
+  float dataBuffer[6]; 
+
+  microsNow = micros();
+  BLECentral central = blePeripheral.central(); //refactor into event handler
+  if(central.connected()) { // if a central is connected to peripheral:
+     
+    if(microsNow - microsPrevious >= microsPerReading) { 
+      if(switchcontrol != 0) {
+        microsPrevious = microsNow;
+        CurieIMU.readMotionSensor(aix, aiy, aiz, gix, giy, giz);
+        ax = convertRawAcceleration(aix); 
+        ay = convertRawAcceleration(aiy); 
+        az = convertRawAcceleration(aiz); 
+        gx = convertRawGyro(gix); 
+        gy = convertRawGyro(giy); 
+        gz = convertRawGyro(giz); 
+        seconds = micros();
+
+        float values[] = {ax, ay, az, gx, gy, gz};
+        populateBuffer(dataBuffer, values);
+        //dataBuffer[] = seconds;
+        // dataBuffer[index] = 
+        // dataString += String(ax); dataString += ",";
+        // dataString += String(ay); dataString += ",";
+        // dataString += String(az); dataString += ",";
+        // dataString += String(gx); dataString += ",";
+        // dataString += String(gy); dataString += ",";
+        // dataString += String(gz); dataString += ",";
+        // dataString += String(seconds); 
+        // dataString += String(headingDegrees);
+
+        //Write to File, REFACTOR THIS
+        //SDCardFileWrite(dataBuffer);
+
+        //Write to connected bluetooth device
+        for(int i = 0; i<6; i++) {
+          Serial.println(dataBuffer[i]);
+          SensorStatus1.setValue(dataBuffer[i]);
+        }
+      }
+    } else {//if central not connected
       filecontrol = 1;
-    } 
-  }   
+    }
+  }
+}
