@@ -13,9 +13,14 @@ const uint8_t BASE_NAME_SIZE = sizeof("log") - 1;
 
 // BLE LED Switch Characteristic - custom 128-bit UUID, read and writable by central
 // BLEUnsignedIntCharacteristic SensorStatus1("19B10011-E8F2-537E-4F6C-D104768A1214", BLERead | BLEWrite  );
-BLEPeripheral blePeripheral = BLEPeripheral();
 BLEService GaitSensor1("19B10010-E8F2-537E-4F6C-D104768A1214"); // BLE AnalogRead Service
-BLEIntCharacteristic SensorStatus1("19B10011-E8F2-537E-4F6C-D104768A1214", BLERead | BLEWrite  );
+
+BLEIntCharacteristic ga_ax("AA00", BLERead | BLEWrite  );
+BLEIntCharacteristic ga_ay("AA01", BLERead | BLEWrite  );
+BLEIntCharacteristic ga_az("AA02", BLERead | BLEWrite  );
+BLEIntCharacteristic ga_gx("AB00", BLERead | BLEWrite  );
+BLEIntCharacteristic ga_gy("AA01", BLERead | BLEWrite  );
+BLEIntCharacteristic ga_gz("AA02", BLERead | BLEWrite  );
 
 int switchcontrol = 0;
 int filecontrol = 1;
@@ -113,21 +118,28 @@ void configureCurie() {
 }
 
 void configureBLE() {
-  blePeripheral.setDeviceName("P21"); //works?
-  blePeripheral.setAppearance(0x0080);
+  BLE.begin();
+
+  BLE.setDeviceName("P21"); //works?
+  BLE.setAppearance(0x0080);
   // set advertised local name and service UUID:
-  blePeripheral.setLocalName("GaitSensor1");
-  blePeripheral.setAdvertisedServiceUuid(GaitSensor1.uuid());
+  BLE.setLocalName("GaitSensor1");
+  BLE.setAdvertisedService(GaitSensor1);
   // add service and characteristic:
-  blePeripheral.addAttribute(GaitSensor1);
-  blePeripheral.addAttribute(SensorStatus1);
+  GaitSensor1.addCharacteristic(ga_ax);
+  GaitSensor1.addCharacteristic(ga_ay);
+  GaitSensor1.addCharacteristic(ga_az);
+  GaitSensor1.addCharacteristic(ga_gx);
+  GaitSensor1.addCharacteristic(ga_gy);
+  GaitSensor1.addCharacteristic(ga_gz);
+
+
+  BLE.addService(GaitSensor1);
 
   //register BLE event handler 
-  SensorStatus1.setEventHandler(BLEWritten, BLESensorWrittenHandler);
-  blePeripheral.setEventHandler(BLEConnected, BLEServiceConnectHandler);
-  blePeripheral.setEventHandler(BLEDisconnected, BLEServiceDisconnectHandler);
+  ga_ax.setEventHandler(BLEWritten, BLESensorWrittenHandler);
 
-  blePeripheral.begin();
+  BLE.advertise();
 }
 
 void setup() {
@@ -145,7 +157,7 @@ void loop() {
   float dataBuffer[6]; 
 
   microsNow = micros();
-  BLECentral central = blePeripheral.central(); //refactor into event handler
+  BLEDevice central = BLE.central(); //refactor into event handler
   if(central) { // if a central is connected to peripheral:
     if(microsNow - microsPrevious >= microsPerReading) { 
       if(switchcontrol != 0) {
@@ -164,11 +176,13 @@ void loop() {
 
         //SDCardFileWrite(dataBuffer);
         //Write to connected bluetooth device
-        for(int i = 0; i<6; i++) {
-          Serial.println(dataBuffer[i]);
-          SensorStatus1.setValue(dataBuffer[i]);
-        }
-        SensorStatus1.setValue(seconds); //time value
+        ga_ax.setValue(ax);
+        ga_ay.setValue(ay);
+        ga_az.setValue(az);
+        ga_gx.setValue(gx);
+        ga_gy.setValue(gy);
+        ga_gz.setValue(gz);
+
       }
     } else {//if central not connected
       filecontrol = 1;
