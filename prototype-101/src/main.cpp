@@ -14,13 +14,14 @@ const uint8_t BASE_NAME_SIZE = sizeof("log") - 1;
 // BLE LED Switch Characteristic - custom 128-bit UUID, read and writable by central
 // BLEUnsignedIntCharacteristic SensorStatus1("19B10011-E8F2-537E-4F6C-D104768A1214", BLERead | BLEWrite  );
 BLEService GaitSensor1("19B10010-E8F2-537E-4F6C-D104768A1214"); // BLE AnalogRead Service
+BLEService GaitSensor2("19B11101-E8F2-537E-4F6C-D104768A1214"); // BLE AnalogRead Service
 
-BLEIntCharacteristic ga_ax("AA00", BLERead | BLEWrite  );
-BLEIntCharacteristic ga_ay("AA01", BLERead | BLEWrite  );
-BLEIntCharacteristic ga_az("AA02", BLERead | BLEWrite  );
-BLEIntCharacteristic ga_gx("AB00", BLERead | BLEWrite  );
-BLEIntCharacteristic ga_gy("AA01", BLERead | BLEWrite  );
-BLEIntCharacteristic ga_gz("AA02", BLERead | BLEWrite  );
+BLEIntCharacteristic ga_ax("AA00", BLERead | BLENotify );
+BLEIntCharacteristic ga_ay("AA01", BLERead | BLENotify );
+BLEIntCharacteristic ga_az("AA02", BLERead | BLENotify );
+BLEIntCharacteristic ga_gx("AB00", BLERead | BLENotify );
+BLEIntCharacteristic ga_gy("AB01", BLERead | BLENotify );
+BLEIntCharacteristic ga_gz("AB02", BLERead | BLENotify );
 
 int switchcontrol = 0;
 int filecontrol = 1;
@@ -125,19 +126,20 @@ void configureBLE() {
   // set advertised local name and service UUID:
   BLE.setLocalName("GaitSensor1");
   BLE.setAdvertisedService(GaitSensor1);
+  BLE.setAdvertisedService(GaitSensor2);
   // add service and characteristic:
   GaitSensor1.addCharacteristic(ga_ax);
   GaitSensor1.addCharacteristic(ga_ay);
   GaitSensor1.addCharacteristic(ga_az);
-  GaitSensor1.addCharacteristic(ga_gx);
-  GaitSensor1.addCharacteristic(ga_gy);
-  GaitSensor1.addCharacteristic(ga_gz);
-
+  GaitSensor2.addCharacteristic(ga_gx);
+  GaitSensor2.addCharacteristic(ga_gy);
+  GaitSensor2.addCharacteristic(ga_gz);
 
   BLE.addService(GaitSensor1);
+  BLE.addService(GaitSensor2);
 
   //register BLE event handler 
-  ga_ax.setEventHandler(BLEWritten, BLESensorWrittenHandler);
+  //ga_ax.setEventHandler(BLEWritten, BLESensorWrittenHandler);
 
   BLE.advertise();
 }
@@ -156,19 +158,21 @@ void loop() {
   unsigned long microsNow, seconds;
   float dataBuffer[6]; 
 
-  microsNow = micros();
   BLEDevice central = BLE.central(); //refactor into event handler
   if(central) { // if a central is connected to peripheral:
-    if(microsNow - microsPrevious >= microsPerReading) { 
-      if(switchcontrol != 0) {
+    digitalWrite(13, HIGH);
+
+    while(central.connected()) {
+      microsNow = micros();
+      if(microsNow - microsPrevious >= microsPerReading) { 
         microsPrevious = microsNow;
         CurieIMU.readMotionSensor(aix, aiy, aiz, gix, giy, giz);
-        ax = convertRawAcceleration(aix); 
-        ay = convertRawAcceleration(aiy); 
-        az = convertRawAcceleration(aiz); 
-        gx = convertRawGyro(gix); 
-        gy = convertRawGyro(giy); 
-        gz = convertRawGyro(giz); 
+        ax = convertRawAcceleration(aix);
+        ay = convertRawAcceleration(aiy);
+        az = convertRawAcceleration(aiz);
+        gx = convertRawGyro(gix);
+        gy = convertRawGyro(giy);
+        gz = convertRawGyro(giz);
         seconds = micros();
 
         float values[] = {ax, ay, az, gx, gy, gz};
@@ -176,16 +180,18 @@ void loop() {
 
         //SDCardFileWrite(dataBuffer);
         //Write to connected bluetooth device
-        ga_ax.setValue(ax);
-        ga_ay.setValue(ay);
-        ga_az.setValue(az);
-        ga_gx.setValue(gx);
-        ga_gy.setValue(gy);
-        ga_gz.setValue(gz);
-
-      }
-    } else {//if central not connected
-      filecontrol = 1;
+        ga_ax.setValue(aix);
+        ga_ay.setValue(aiy);
+        ga_az.setValue(aiz);
+        ga_gx.setValue(gix);
+        ga_gy.setValue(giy);
+        ga_gz.setValue(giz);
+      } 
     }
-  }
+
+    digitalWrite(13, LOW);
+  } 
+  // else {//if central not connected
+  //     filecontrol = 1;
+  // }
 }
