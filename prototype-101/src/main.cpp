@@ -116,6 +116,8 @@ void configureCurie() {
   filter.begin(25); //converts raw data into 4-dimensional numbers
   CurieIMU.setAccelerometerRange(ACC_RANGE); 
   CurieIMU.setGyroRange(GYR_RANGE); 
+
+  //pinMode(13, OUTPUT);
 }
 
 void configureBLE() {
@@ -158,6 +160,8 @@ void loop() {
   unsigned long microsNow, seconds;
   float dataBuffer[6]; 
 
+  //Serial.println("yas");
+
   BLEDevice central = BLE.central(); //refactor into event handler
   if(central) { // if a central is connected to peripheral:
     digitalWrite(13, HIGH);
@@ -180,12 +184,13 @@ void loop() {
 
         //SDCardFileWrite(dataBuffer);
         //Write to connected bluetooth device
-        ga_ax.setValue(aix);
-        ga_ay.setValue(aiy);
-        ga_az.setValue(aiz);
-        ga_gx.setValue(gix);
-        ga_gy.setValue(giy);
-        ga_gz.setValue(giz);
+        if(ga_ax.canNotify()) { ga_ax.setValue(aix); }
+        if(ga_ay.canNotify()) { ga_ay.setValue(aiy); }
+        if(ga_az.canNotify()) { ga_az.setValue(aiz); }
+        if(ga_gx.canNotify()) { ga_gx.setValue(gix); }
+        if(ga_gy.canNotify()) { ga_gy.setValue(giy); }
+        if(ga_gz.canNotify()) { ga_gz.setValue(giz); }
+          
       } 
     }
 
