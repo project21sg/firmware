@@ -30,7 +30,7 @@ File datafile;
 char fileName[] = "log00.csv";
 
 Madgwick filter;
-unsigned long microsPerReading = 1000000 / 25; //micro seconds needed per reading (period)
+unsigned long microsPerReading = 1000000 / 5; //5 frames/sec is STABLE!?  horrible...
 unsigned long microsPrevious;
 
 /*
@@ -117,7 +117,7 @@ void configureCurie() {
   CurieIMU.setAccelerometerRange(ACC_RANGE); 
   CurieIMU.setGyroRange(GYR_RANGE); 
 
-  //pinMode(13, OUTPUT);
+  pinMode(13, OUTPUT);
 }
 
 void configureBLE() {
@@ -147,7 +147,7 @@ void configureBLE() {
 }
 
 void setup() {
-  Serial.begin(115200);
+  //Serial.begin(115200);
   configureCurie();
   //configureSDReader();
   configureBLE();
@@ -171,25 +171,32 @@ void loop() {
       if(microsNow - microsPrevious >= microsPerReading) { 
         microsPrevious = microsNow;
         CurieIMU.readMotionSensor(aix, aiy, aiz, gix, giy, giz);
-        ax = convertRawAcceleration(aix);
-        ay = convertRawAcceleration(aiy);
-        az = convertRawAcceleration(aiz);
-        gx = convertRawGyro(gix);
-        gy = convertRawGyro(giy);
-        gz = convertRawGyro(giz);
-        seconds = micros();
+        // ax = convertRawAcceleration(aix);
+        // ay = convertRawAcceleration(aiy);
+        // az = convertRawAcceleration(aiz);
+        // gx = convertRawGyro(gix);
+        // gy = convertRawGyro(giy);
+        // gz = convertRawGyro(giz);
+        // seconds = micros();
 
-        float values[] = {ax, ay, az, gx, gy, gz};
-        populateBuffer(dataBuffer, values);
+        // float values[] = {ax, ay, az, gx, gy, gz};
+        // populateBuffer(dataBuffer, values);
 
         //SDCardFileWrite(dataBuffer);
         //Write to connected bluetooth device
-        if(ga_ax.canNotify()) { ga_ax.setValue(aix); }
-        if(ga_ay.canNotify()) { ga_ay.setValue(aiy); }
-        if(ga_az.canNotify()) { ga_az.setValue(aiz); }
-        if(ga_gx.canNotify()) { ga_gx.setValue(gix); }
-        if(ga_gy.canNotify()) { ga_gy.setValue(giy); }
-        if(ga_gz.canNotify()) { ga_gz.setValue(giz); }
+        if(ga_ax.canNotify()) {ga_ax.setValue(aix);}
+        if(ga_ay.canNotify()) {ga_ay.setValue(aiy);}
+        if(ga_az.canNotify()) {ga_az.setValue(aiz);}
+        if(ga_gx.canNotify()) {ga_gx.setValue(gix);}
+        if(ga_gy.canNotify()) {ga_gy.setValue(giy);}
+        if(ga_gz.canNotify()) {ga_gz.setValue(giz);}
+
+        // ga_ax.setValue(aix);
+        // ga_ay.setValue(aiy);
+        // ga_az.setValue(aiz);
+        // ga_gx.setValue(gix);
+        // ga_gy.setValue(giy);
+        // ga_gz.setValue(giz);
           
       } 
     }
