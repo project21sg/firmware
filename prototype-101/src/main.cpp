@@ -14,14 +14,9 @@ const uint8_t BASE_NAME_SIZE = sizeof("log") - 1;
 // BLE LED Switch Characteristic - custom 128-bit UUID, read and writable by central
 // BLEUnsignedIntCharacteristic SensorStatus1("19B10011-E8F2-537E-4F6C-D104768A1214", BLERead | BLEWrite  );
 BLEService GaitSensor1("19B10010-E8F2-537E-4F6C-D104768A1214"); // BLE AnalogRead Service
-BLEService GaitSensor2("19B11101-E8F2-537E-4F6C-D104768A1214"); // BLE AnalogRead Service
 
-BLEIntCharacteristic ga_ax("AA00", BLERead | BLENotify );
-BLEIntCharacteristic ga_ay("AA01", BLERead | BLENotify );
-BLEIntCharacteristic ga_az("AA02", BLERead | BLENotify );
-BLEIntCharacteristic ga_gx("AB00", BLERead | BLENotify );
-BLEIntCharacteristic ga_gy("AB01", BLERead | BLENotify );
-BLEIntCharacteristic ga_gz("AB02", BLERead | BLENotify );
+BLECharacteristic ga_acc("AA00", BLERead | BLENotify , 12 ); //acc X,Y,Z | BLENotify
+BLECharacteristic ga_gyr("AB00", BLERead | BLENotify , 12 ); //gyr X,Y,Z + time maybe | BLENotify
 
 int switchcontrol = 0;
 int filecontrol = 1;
@@ -30,7 +25,7 @@ File datafile;
 char fileName[] = "log00.csv";
 
 Madgwick filter;
-unsigned long microsPerReading = 1000000 / 5; //5 frames/sec is STABLE!?  horrible...
+unsigned long microsPerReading = 1000000 / 25; //low frames for stability
 unsigned long microsPrevious;
 
 /*
@@ -128,22 +123,19 @@ void configureBLE() {
   // set advertised local name and service UUID:
   BLE.setLocalName("GaitSensor1");
   BLE.setAdvertisedService(GaitSensor1);
-  BLE.setAdvertisedService(GaitSensor2);
   // add service and characteristic:
-  GaitSensor1.addCharacteristic(ga_ax);
-  GaitSensor1.addCharacteristic(ga_ay);
-  GaitSensor1.addCharacteristic(ga_az);
-  GaitSensor2.addCharacteristic(ga_gx);
-  GaitSensor2.addCharacteristic(ga_gy);
-  GaitSensor2.addCharacteristic(ga_gz);
-
+  GaitSensor1.addCharacteristic(ga_acc);
+  GaitSensor1.addCharacteristic(ga_gyr);
   BLE.addService(GaitSensor1);
-  BLE.addService(GaitSensor2);
-
-  //register BLE event handler 
-  //ga_ax.setEventHandler(BLEWritten, BLESensorWrittenHandler);
 
   BLE.advertise();
+}
+
+void copyIntoByteArray(unsigned char buffer[], int nBytesOffset, int value) {
+  buffer[nBytesOffset] = (value >> 24) & 0xFF; 
+  buffer[nBytesOffset+1] = (value >> 16) & 0xFF; 
+  buffer[nBytesOffset+2] = (value >> 8) & 0xFF; 
+  buffer[nBytesOffset+3] = value & 0xFF; 
 }
 
 void setup() {
@@ -156,21 +148,30 @@ void setup() {
 
 void loop() {
   int aix, aiy, aiz, gix, giy, giz;
-  float ax, ay, az, gx, gy, gz;
-  unsigned long microsNow, seconds;
-  float dataBuffer[6]; 
+  //float ax, ay, az, gx, gy, gz;
+  unsigned long microsNow;
+  //float dataBuffer[6]; 
+
+  unsigned char accBuffer[12];
+  unsigned char gyrBuffer[12];
 
   //Serial.println("yas");
-
   BLEDevice central = BLE.central(); //refactor into event handler
+
   if(central) { // if a central is connected to peripheral:
     digitalWrite(13, HIGH);
-
     while(central.connected()) {
       microsNow = micros();
       if(microsNow - microsPrevious >= microsPerReading) { 
         microsPrevious = microsNow;
         CurieIMU.readMotionSensor(aix, aiy, aiz, gix, giy, giz);
+        copyIntoByteArray(accBuffer, 0, aix);
+        copyIntoByteArray(accBuffer, 4, aiy);
+        copyIntoByteArray(accBuffer, 8, aiz);
+        copyIntoByteArray(gyrBuffer, 0, gix);
+        copyIntoByteArray(gyrBuffer, 4, giy);
+        copyIntoByteArray(gyrBuffer, 8, giz);
+
         // ax = convertRawAcceleration(aix);
         // ay = convertRawAcceleration(aiy);
         // az = convertRawAcceleration(aiz);
@@ -184,13 +185,11 @@ void loop() {
 
         //SDCardFileWrite(dataBuffer);
         //Write to connected bluetooth device
-        if(ga_ax.canNotify()) {ga_ax.setValue(aix);}
-        if(ga_ay.canNotify()) {ga_ay.setValue(aiy);}
-        if(ga_az.canNotify()) {ga_az.setValue(aiz);}
-        if(ga_gx.canNotify()) {ga_gx.setValue(gix);}
-        if(ga_gy.canNotify()) {ga_gy.setValue(giy);}
-        if(ga_gz.canNotify()) {ga_gz.setValue(giz);}
-
+        //Serial.println(microsNow);
+        if(ga_acc.canNotify()) { ga_acc.setValue(accBuffer, 12) ? Serial.println("acc done") : Serial.println("acc crashed?");}
+        if(ga_gyr.canNotify()) {ga_gyr.setValue(gyrBuffer, 12) ? Serial.println("gyr done") : Serial.println("gyr crashed?");}
+        // ga_acc.setValue(accBuffer, 12);
+        // ga_gyr.setValue(gyrBuffer, 12);
         // ga_ax.setValue(aix);
         // ga_ay.setValue(aiy);
         // ga_az.setValue(aiz);
