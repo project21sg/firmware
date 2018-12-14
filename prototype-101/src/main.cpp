@@ -25,7 +25,7 @@ File datafile;
 char fileName[] = "log00.csv";
 
 //Madgwick filter;
-unsigned long microsPerReading = 1000000 / 25; //low frames for stability
+unsigned long microsPerReading = 1000000 / 25;
 unsigned long microsPrevious;
 
 /*
@@ -131,15 +131,20 @@ void configureBLE() {
   BLE.advertise();
 }
 
-void copyIntoByteArray(unsigned char buffer[], int nBytesOffset, int value) {
+void copy4BytesIntoByteArray(unsigned char buffer[], int nBytesOffset, int value) {
   buffer[nBytesOffset] = (value >> 24) & 0xFF; 
   buffer[nBytesOffset+1] = (value >> 16) & 0xFF; 
   buffer[nBytesOffset+2] = (value >> 8) & 0xFF; 
   buffer[nBytesOffset+3] = value & 0xFF; 
 }
 
+void copy2BytesIntoByteArray(unsigned char buffer[], int nBytesOffset, int value) {
+  buffer[nBytesOffset] = (value >> 8) & 0xFF; 
+  buffer[nBytesOffset+1] = value & 0xFF; 
+}
+
 void setup() {
-  //Serial.begin(115200);
+  Serial.begin(115200);
   configureCurie();
   //configureSDReader();
   configureBLE();
@@ -168,14 +173,26 @@ void loop() {
         noInterrupts();
         CurieIMU.readMotionSensor(aix, aiy, aiz, gix, giy, giz);
         interrupts();
+        Serial.print(microsNow);
 
-        copyIntoByteArray(accBuffer, 0, aix);
-        copyIntoByteArray(accBuffer, 4, aiy);
-        copyIntoByteArray(accBuffer, 8, aiz);
-        copyIntoByteArray(gyrBuffer, 0, gix);
-        copyIntoByteArray(gyrBuffer, 4, giy);
-        copyIntoByteArray(gyrBuffer, 8, giz);
+        // copy4BytesIntoByteArray(accBuffer, 0, aix);
+        // copy4BytesIntoByteArray(accBuffer, 4, aiy);
+        // copy4BytesIntoByteArray(accBuffer, 8, aiz);
+        // copy4BytesIntoByteArray(gyrBuffer, 0, gix);
+        // copy4BytesIntoByteArray(gyrBuffer, 4, giy);
+        // copy4BytesIntoByteArray(gyrBuffer, 8, giz);
 
+        copy2BytesIntoByteArray(accBuffer, 0, aix / 256);
+        copy2BytesIntoByteArray(accBuffer, 2, aiy / 256);
+        copy2BytesIntoByteArray(accBuffer, 4, aiz / 256);
+        copy2BytesIntoByteArray(accBuffer, 6, gix / 256);
+        copy2BytesIntoByteArray(accBuffer, 8, giy / 256);
+        copy2BytesIntoByteArray(accBuffer, 10, giz / 256);
+
+        if(ga_acc.canNotify()) { ga_acc.setValue(accBuffer, 12) ? Serial.println("acc done") : Serial.println("acc crashed?");}
+        //if(ga_gyr.canNotify()) { ga_gyr.setValue(gyrBuffer, 12) ? Serial.println("gyr done") : Serial.println("gyr crashed?");}
+        // ga_acc.setValue(accBuffer, 12);
+        // ga_gyr.setValue(gyrBuffer, 12);
         // ax = convertRawAcceleration(aix);
         // ay = convertRawAcceleration(aiy);
         // az = convertRawAcceleration(aiz);
@@ -190,10 +207,7 @@ void loop() {
         //SDCardFileWrite(dataBuffer);
         //Write to connected bluetooth device
         //Serial.println(microsNow);
-        if(ga_acc.canNotify()) { ga_acc.setValue(accBuffer, 12) ? Serial.println("acc done") : Serial.println("acc crashed?");}
-        if(ga_gyr.canNotify()) { ga_gyr.setValue(gyrBuffer, 12) ? Serial.println("gyr done") : Serial.println("gyr crashed?");}
-        // ga_acc.setValue(accBuffer, 12);
-        // ga_gyr.setValue(gyrBuffer, 12);
+        
       } 
     }
 
