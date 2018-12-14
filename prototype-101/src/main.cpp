@@ -24,7 +24,7 @@ int filecontrol = 1;
 File datafile;
 char fileName[] = "log00.csv";
 
-Madgwick filter;
+//Madgwick filter;
 unsigned long microsPerReading = 1000000 / 25; //low frames for stability
 unsigned long microsPrevious;
 
@@ -108,10 +108,10 @@ void configureCurie() {
   CurieIMU.begin();   // start the IMU and filter
   CurieIMU.setGyroRate(ACC_SAMPLING_RATE); //set sampling rate 25Hz
   CurieIMU.setAccelerometerRate(GYR_SAMPLING_RATE); //set sampling rate 25Hz
-  filter.begin(25); //converts raw data into 4-dimensional numbers
-  CurieIMU.setAccelerometerRange(ACC_RANGE); 
   CurieIMU.setGyroRange(GYR_RANGE); 
+  CurieIMU.setAccelerometerRange(ACC_RANGE); 
 
+  //filter.begin(25); //raw yaw and pitch generator, use with .updateIMU() and .getX
   pinMode(13, OUTPUT);
 }
 
@@ -164,7 +164,11 @@ void loop() {
       microsNow = micros();
       if(microsNow - microsPrevious >= microsPerReading) { 
         microsPrevious = microsNow;
+
+        noInterrupts();
         CurieIMU.readMotionSensor(aix, aiy, aiz, gix, giy, giz);
+        interrupts();
+
         copyIntoByteArray(accBuffer, 0, aix);
         copyIntoByteArray(accBuffer, 4, aiy);
         copyIntoByteArray(accBuffer, 8, aiz);
@@ -187,16 +191,9 @@ void loop() {
         //Write to connected bluetooth device
         //Serial.println(microsNow);
         if(ga_acc.canNotify()) { ga_acc.setValue(accBuffer, 12) ? Serial.println("acc done") : Serial.println("acc crashed?");}
-        if(ga_gyr.canNotify()) {ga_gyr.setValue(gyrBuffer, 12) ? Serial.println("gyr done") : Serial.println("gyr crashed?");}
+        if(ga_gyr.canNotify()) { ga_gyr.setValue(gyrBuffer, 12) ? Serial.println("gyr done") : Serial.println("gyr crashed?");}
         // ga_acc.setValue(accBuffer, 12);
         // ga_gyr.setValue(gyrBuffer, 12);
-        // ga_ax.setValue(aix);
-        // ga_ay.setValue(aiy);
-        // ga_az.setValue(aiz);
-        // ga_gx.setValue(gix);
-        // ga_gy.setValue(giy);
-        // ga_gz.setValue(giz);
-          
       } 
     }
 
